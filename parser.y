@@ -612,13 +612,19 @@ void generate_basic_asm_header(vector<Global_Asm_Item> global_scope){
             cout << "   .type"  << "\t" << global_scope[0].global_label << ", " << global_scope[0].global_type << endl;
             cout << "   .size"  << "\t" << global_scope[0].global_label << ", " << global_scope[0].size_item << endl;
             //TODO: Need to add a .comm case (global vars without set value)
-            for(auto& e : global_scope){
-                  cout << e.global_label << ":" << endl;
+            for(unsigned int i = 0; i < global_scope.size(); i++){
+                  cout << global_scope[i].global_label << ":" << endl;
                   cout << "   .long"  << "\t" << "0" <<  endl;
                   cout << "   .text"  << "\t" <<  endl;
-                  auto next = e;
-                  cout << "   .globl" << "\t" << next.global_label <<  endl;
-                  cout << "   .type"  << "\t" << next.global_label << ", " << global_scope[0].global_type << endl;
+                  if(i+1 < global_scope.size()){
+                        auto next = global_scope[i+1];
+                        cout << "   .globl" << "\t" << next.global_label <<  endl;
+                        cout << "   .type"  << "\t" << next.global_label << ", " << next.global_type << endl;
+                  }
+                  else{
+                        cout << "   .globl" << "\t" << global_scope[i].global_label <<  endl;
+                        cout << "   .type"  << "\t" << global_scope[i].global_label << ", " << global_scope[i].global_type << endl;
+                  }
             }
       }
       else{
