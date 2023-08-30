@@ -7,21 +7,28 @@
 #include <memory>
 #include "tree.hh"
 #include "table.hh"
-#include "iloc.hh"
+#include "code.hh"
 
 using namespace std;
 
+extern int g_argc;
+extern char *g_argv;
 extern int get_line_number(void);
+
+//Flag for control in case of global variables
+bool global_exists = false;
+
 void throw_error_message (AstNode* node, int error_code);
+void generate_basic_asm_header(vector<Global_Asm_Item> global_scope);
+
 extern void *arvore;
 int yylex(void);
 int yyerror (const char *message);
 
 StackTable stack_table{};
-string main_token;
-label_type main_label = 99;
-vector<vector<reg_type>> param_regs {};
-vector<Token_assoc> label_memory {};
+
+//e6 definitions
+vector<Global_Asm_Item> global_list_item;
 
 %}
 
@@ -29,7 +36,7 @@ vector<Token_assoc> label_memory {};
       #include <memory>
       #include "tree.hh"
       #include "table.hh"
-      #include "iloc.hh"
+      #include "code.hh"
 }
 
 %union {
@@ -108,28 +115,13 @@ vector<Token_assoc> label_memory {};
 
 %%
 
-programa    : {stack_table.create_new_stack();} list_decl {
+programa    : {stack_table.create_new_stack();} 
+            list_decl {
                $$ = $2;
-               //e5 goes here - main label generation
-               //Command list declarations
-               auto main_symbol_table = stack_table.rec_symbol_occurence(main_token);
-               vector<Command> code = create_call_commands(main_label, main_symbol_table, {});
-
-               // Using insert - vector library
-               code.insert(code.begin(), Command{Instruct::ADD_I, Cod_ILOC::RSP, 4, Cod_ILOC::RSP, Cod_ILOC::NO_REG});
-               code.insert(code.begin(), Command{Instruct::I2I, Cod_ILOC::RFP, Cod_ILOC::NO_REG, Cod_ILOC::RSP, Cod_ILOC::NO_REG});
-               Cod_ILOC::label_type end = Cod_ILOC::get_new_label();
-               code.push_back(Command{Instruct::JUMP_I, Cod_ILOC::NO_REG, Cod_ILOC::NO_REG, end, Cod_ILOC::NO_REG});
-               for (auto command : $2->code_element.code) {
-                  code.push_back(command);
-               }
-               //Nedd to out a halt on this code
-               code.push_back(Command{end, Instruct::HALT});
-               //Hanging code into the tree
-               $2->code_element.code = code;
-               //End main code generation
                arvore = $$; 
                stack_table.pop_table();
+               //The top of the program needs to go here
+               generate_basic_asm_header(global_list_item);
             }
             ;
         
@@ -158,8 +150,27 @@ decl        : var ';' {$$ = nullptr;}
 var         : type list_id {$$ = nullptr;}
             ;
 
-list_id     : list_id ',' id_label {$$ = nullptr;}
-            | id_label {$$ = nullptr;}
+list_id     : list_id ',' TK_IDENTIFICADOR {
+                  $$ = nullptr;
+                  Global_Asm_Item g{
+                        $3->get_tk_value(),
+                        4,
+                        "@object"
+                  };
+                  global_list_item.push_back(g);
+            }
+            | TK_IDENTIFICADOR {
+                  $$ = nullptr;
+                  global_exists = true;
+                  //Need to push back the item for the global list
+                  Global_Asm_Item g{
+                        $1->get_tk_value(),
+                        4,
+                        "@object"
+                  };
+                  global_list_item.push_back(g);
+                  //cout << $1->get_tk_value();
+            }
             ;
 
 type        : TK_PR_INT   {$$ = $1;}
@@ -359,6 +370,8 @@ cmd_func_call: name_func {
                               throw_error_message($1, check_symbol);
                               exit(check_symbol);
                         }
+                        //Here we generate the body for the function code
+
                   }
                   else{
                         throw_error_message ($1, ERR_UNDECLARED);
@@ -585,4 +598,31 @@ void throw_error_message (AstNode* node, int error_code) {
             cout << "[error found on line " << line_number
                   << "] conversion " << token_type << " >> undentified error." << endl;
     }
+}
+
+void generate_basic_asm_header(vector<Global_Asm_Item> global_scope){
+      //TODO - Create methods to replace this fix generation
+      //for one with parameters
+      cout << "   .file"  << "\t" << "saida" << endl;
+      cout << "   .text"  << endl;
+      if(global_exists){
+            cout << "   .globl" << "\t" << global_scope[0].global_label << endl;
+            cout << "   .data"  << endl;
+            cout << "   .align" << "\t" << global_scope[0].size_item << endl;
+            cout << "   .type"  << "\t" << global_scope[0].global_label << ", " << global_scope[0].global_type << endl;
+            cout << "   .size"  << "\t" << global_scope[0].global_label << ", " << global_scope[0].size_item << endl;
+            //TODO: Need to add a .comm case (global vars without set value)
+            for(auto& e : global_scope){
+                  cout << e.global_label << ":" << endl;
+                  cout << "   .long"  << "\t" << "0" <<  endl;
+                  cout << "   .text"  << "\t" <<  endl;
+                  auto next = e;
+                  cout << "   .globl" << "\t" << next.global_label <<  endl;
+                  cout << "   .type"  << "\t" << next.global_label << ", " << global_scope[0].global_type << endl;
+            }
+      }
+      else{
+            cout << "   .globl" << "\t" << "main" << endl;
+            cout << "   .type"  << "\t" << "main" << ", " << "@function" << endl;
+      }
 }

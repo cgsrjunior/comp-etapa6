@@ -2,7 +2,6 @@
 #include <vector>
 #include <string>
 #include <memory>
-#include "iloc.hh"
 
 using namespace std;
 
@@ -42,8 +41,7 @@ struct AstNode {
         //This field will determined by the operation of the node if necessary
         NodeType type;
 
-        //New fields for e5
-        ILOC_element code_element;
+        //New fields for e6
 
         //Gets and sets for the new type field defined in E4
         inline NodeType get_type_node()                { return this->type; }
