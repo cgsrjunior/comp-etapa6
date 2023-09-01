@@ -2,6 +2,7 @@
 #include <vector>
 #include <string>
 #include <memory>
+#include "code.hh"
 
 using namespace std;
 
@@ -42,6 +43,11 @@ struct AstNode {
         NodeType type;
 
         //New fields for e6
+        vector<Operation_Asm_Item> code;
+
+        //New functions for e6
+        void attach_code(Operation_Asm_Item inst);
+        //End definitions for e6
 
         //Gets and sets for the new type field defined in E4
         inline NodeType get_type_node()                { return this->type; }
@@ -66,20 +72,14 @@ struct AstNode {
 
 //Convert node label to string
 string nodetype_to_string(NodeType node);
-
 NodeType string_to_nodetype(string node_type);
-
 //Smart pointer for the tree
 typedef shared_ptr<AstNode> smart_pointer;
-
 //Function to export the tree
 void exporta(void* tree);
-
 //Function to print the tree
 void print_tree(shared_ptr<AstNode> tree);
-
 //Get last node
 shared_ptr<AstNode> lastNode(shared_ptr<AstNode> node);
-
 //Check node attribute
 int checkAtrib(shared_ptr<AstNode> tree);
