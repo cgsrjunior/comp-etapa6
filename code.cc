@@ -19,5 +19,16 @@ void generate_label_lbf(){
 }
 
 void print_line_asm(Operation_Asm_Item item){
-    cout << "\t" << item.instruction << item.op1 << item.op2 << endl;
+    if(item.label_needed)
+        generate_func_label(item.instruction);
+    else
+        if((item.op1 == "") && (item.op2 == "")){
+            cout << "\t" << item.instruction << endl;
+        }
+        else if(item.op2 == ""){
+            cout << "\t" << item.instruction << " " << item.op1 << endl;
+        }
+        else{
+            cout << "\t" << item.instruction << " " << item.op1 << ", " << item.op2 << endl;
+        }
 }

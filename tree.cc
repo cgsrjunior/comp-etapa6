@@ -71,6 +71,7 @@ void AstNode::reg_func_call(bool value){
     }
 }
 
+
 void print_tree(shared_ptr<AstNode> tree) {
     try{
         cout << tree << " [label=\"" << tree->formatstring() << "\"];" << endl;
@@ -84,6 +85,32 @@ void print_tree(shared_ptr<AstNode> tree) {
         cout<< "Exception caught: " << er.what() << endl;
     }
 }
+
+
+/*
+The idea is to modify the tree print method to print all of the code
+It didn't work out yet
+void print_tree(shared_ptr<AstNode> tree) {
+    try{
+        //cout << tree << " [label=\"" << tree->formatstring() << "\"];" << endl;
+	    for (auto& child : tree->children) {
+            cout << "banana" << endl;
+            // Iterating vector by using index
+            for (long unsigned int i = 0; i < child->code.size(); i++) {
+                // Printing the element at
+                // index 'i' of vector
+                cout << "deu certo" << endl;
+            }
+		    //cout << tree << ", " << child << endl;
+		    //print_tree(child);
+    	}
+    }
+    catch(const exception& er)
+    {
+        cout<< "Exception caught: " << er.what() << endl;
+    }
+}
+*/
 
 void exporta(void* tree) {
     try{

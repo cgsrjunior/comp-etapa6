@@ -29,6 +29,15 @@ struct Operation_Asm_Item{
     //The idea is to use this flag to check whenever we need to generate labels
     //Examples Functions need labels and whiles too
     bool label_needed;
+    //We need to save the index of the variables in case of attrib command
+    //If this was necessary, we simple put a -1 as a convention
+    int index_var;
+};
+
+//We need a structure to facilitate the search and retrive of indexes
+struct Main_Var_Decl{
+    string name_var;
+    int index_var;
 };
 
 //Auxiliary functions

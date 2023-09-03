@@ -20,6 +20,8 @@ bool global_exists = false;
 
 void throw_error_message (AstNode* node, int error_code);
 void generate_basic_asm_header(vector<Global_Asm_Item> global_scope);
+int find_correct_variable_index(string name_var);
+bool variable_index_exists(string name_var);
 
 extern void *arvore;
 int yylex(void);
@@ -29,6 +31,9 @@ StackTable stack_table{};
 
 //e6 definitions
 vector<Global_Asm_Item> global_list_item;
+int rbp_multiplier = 1;
+
+vector<Main_Var_Decl> main_var_decl;
 
 %}
 
@@ -115,13 +120,13 @@ vector<Global_Asm_Item> global_list_item;
 
 %%
 
-programa    : {stack_table.create_new_stack();} 
+programa    : {stack_table.create_new_stack(); } 
             list_decl {
                $$ = $2;
                arvore = $$; 
                stack_table.pop_table();
                //The top of the program needs to go here
-               generate_basic_asm_header(global_list_item);
+               //generate_basic_asm_header(global_list_item);
             }
             ;
         
@@ -143,11 +148,24 @@ list_decl   : list_decl decl {
             ;
 
 decl        : var ';' {$$ = nullptr;}
-            | func {$$ = $1;}
+            | func {$$ = $1; }
             ;
 
-/* Separar variaveis em listas por tipo */
-var         : type list_id {$$ = nullptr;}
+/* Separar variaveis em listas por tipo
+ Since our program would only use main
+ I've taken the liberty to make a small
+ hardcoded input given theD time constraints
+ */
+var         : type list_id {
+                  $$ = nullptr;
+                  Global_Asm_Item g{
+                        "main",
+                        4,
+                        "@function"
+                  };
+                  global_list_item.push_back(g);
+                  generate_basic_asm_header(global_list_item);
+            }
             ;
 
 list_id     : list_id ',' TK_IDENTIFICADOR {
@@ -158,6 +176,7 @@ list_id     : list_id ',' TK_IDENTIFICADOR {
                         "@object"
                   };
                   global_list_item.push_back(g);
+                  //Print the header here
             }
             | TK_IDENTIFICADOR {
                   $$ = nullptr;
@@ -169,7 +188,7 @@ list_id     : list_id ',' TK_IDENTIFICADOR {
                         "@object"
                   };
                   global_list_item.push_back(g);
-                  //cout << $1->get_tk_value();
+                  //Print the header here
             }
             ;
 
@@ -199,18 +218,45 @@ func        : TK_IDENTIFICADOR {
                         $1->get_tk_value(),
                         "",
                         "",
-                        true
+                        true,
+                        -1
                   };
+                  print_line_asm(inst);
                   $1->attach_code(inst);
-                  //generate_func_label($1->code[0].instruction);
 
-                  /*Create a symbol for the main program
-                  Just for the adjustment of the first pointer
+                  //If the function was main, we need to create the two basic commands at the beginning
+                  /*
+                  pushq %rbp
+                  movq %rsp , %rbp
+                  */
+                  Operation_Asm_Item inst2 {
+                        "pushq",
+                        "%rbp",
+                        "",
+                        false,
+                        -1
+                  };
+                  print_line_asm(inst2);
+                  $1->attach_code(inst2);
+                  Operation_Asm_Item inst3 {
+                        "movq",
+                        "%rsp",
+                        "%rbp",
+                        false,
+                        -1
+                  };
+                  print_line_asm(inst3);
+                  $1->attach_code(inst3);
+
+
+                  //Create a symbol for the main program
+                  //Just for the adjustment of the first pointer
                   Global_Asm_Item g{
                         $1->get_tk_value(),
                         4,
                         "@function"
                   };
+                  /*
                   global_list_item.push_back(g);
                   Generate the func label to the program reference
                   cout << $1->get_tk_value() << ":" << endl;
@@ -288,6 +334,22 @@ init_var        : id_label TK_OC_LE lit{
                   $$ = $2;
                   $$->add_child($1);
                   $$->add_child($3);
+                  Operation_Asm_Item ret1{
+                        "movl",
+                        "$" + $3->get_tk_value(),
+                        "-" + std::to_string(4*rbp_multiplier) + "(%rbp)",
+                        false,
+                        4*rbp_multiplier
+                  };
+                  //Mechanisms to save variables
+                  Main_Var_Decl var_decl{
+                        $1->get_tk_value(),
+                        4*rbp_multiplier
+                  };
+                  main_var_decl.push_back(var_decl);
+                  rbp_multiplier++;
+                  $1->attach_code(ret1);
+                  print_line_asm(ret1);
                 }
                 ;
 
@@ -532,10 +594,30 @@ cmd_atrib   : id_var_decl '=' expr {
                   //First we need to check if the variable was created before we make the atribution command
                   try{
                         if(!(stack_table.value_declared($1->get_tk_value()))){
-                              cout << "Entrei no id_var_decl" << endl;
+                              //cout << "Entrei no id_var_decl" << endl;
                               throw_error_message ($1, ERR_UNDECLARED);
                               exit(ERR_UNDECLARED);
                         }
+                        //movl $1, -8(%rbp)
+                        //We only need to pick the previous index saved
+                        int ind;
+                        if(variable_index_exists($1->get_tk_value()))
+                              ind = find_correct_variable_index($1->get_tk_value());
+                        else{
+                              throw_error_message ($1, ERR_UNDECLARED);
+                              exit(ERR_UNDECLARED);
+                        }
+                        Operation_Asm_Item atrib1{
+                              "movl",
+                              "$" + $3->get_tk_value(),
+                              //TODO - Create a list of variables declared in main
+                              //and search for the variables to pick the index
+                              "-" + std::to_string(ind) + "(%rbp)",
+                              false,
+                              -1
+                        };
+                        print_line_asm(atrib1);
+                        $1->attach_code(atrib1);
                         $$ = $2; 
                         $$->add_child($1); 
                         $$->add_child($3);
@@ -574,7 +656,40 @@ id_var_decl: TK_IDENTIFICADOR {
       }
       ;
 
-cmd_return  : TK_PR_RETURN expr {$$ = $1; $$->add_child($2);}
+cmd_return  : TK_PR_RETURN expr {
+                  /*movl $0, %eax
+                  popq	%rbp
+                  .cfi_def_cfa 7, 8
+                  ret*/
+                  Operation_Asm_Item ret1{
+                        "movl",
+                        "$" + $2->get_tk_value(),
+                        "%eax",
+                        false,
+                        -1
+                  };
+                  print_line_asm(ret1);
+                  $1->attach_code(ret1);
+                  Operation_Asm_Item ret2{
+                        "popq",
+                        "%rbp",
+                        "",
+                        false,
+                        -1
+                  };
+                  print_line_asm(ret2);
+                  $1->attach_code(ret2);
+                  Operation_Asm_Item ret3{
+                        "ret",
+                        "",
+                        "",
+                        false,
+                        -1
+                  };
+                  print_line_asm(ret3);
+                  $1->attach_code(ret3);
+                  $$ = $1; $$->add_child($2);
+            }
             ;
  
 
@@ -636,6 +751,8 @@ void generate_basic_asm_header(vector<Global_Asm_Item> global_scope){
             cout << "   .size"  << "\t" << global_scope[0].global_label << ", " << global_scope[0].size_item << endl;
             //TODO: Need to add a .comm case (global vars without set value)
             for(unsigned int i = 0; i < global_scope.size(); i++){
+                  if(global_scope[i].global_label == "main")
+                        break;
                   cout << global_scope[i].global_label << ":" << endl;
                   cout << "   .long"  << "\t" << "0" <<  endl;
                   cout << "   .text"  << "\t" <<  endl;
@@ -654,4 +771,40 @@ void generate_basic_asm_header(vector<Global_Asm_Item> global_scope){
             cout << "   .globl" << "\t" << "main" << endl;
             cout << "   .type"  << "\t" << "main" << ", " << "@function" << endl;
       }
+}
+
+//Since the e4 guarantee the rules of declaration
+//we just need to search for our variable
+
+bool variable_index_exists(string name_var){
+      try{
+            for(auto& var : main_var_decl){
+                  //cout << var.instruction << endl;
+                  if(var.name_var == name_var){
+                        return true;
+                  }
+            }
+            return false;
+      }
+      catch(const exception& er){
+            cout<< "Exception caught: " << er.what() << endl;
+      }
+      
+}
+
+
+int find_correct_variable_index(string name_var){
+      try{
+            for(auto& var : main_var_decl){
+                  //cout << var.instruction << endl;
+                  if(var.name_var == name_var){
+                        return var.index_var;
+                  }
+            }
+            return -9999999;
+      }
+      catch(const exception& er){
+            cout<< "Exception caught: " << er.what() << endl;
+      }
+      
 }
