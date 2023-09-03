@@ -193,17 +193,29 @@ func        : TK_IDENTIFICADOR {
                         };
                         stack_table.create_table_entry($1->get_tk_value(),simbol);
                   }
-                  //Create a symbol for the main program
-                  //Just for the adjustment of the first pointer
+                  //Need to create the instruction here, attach into the tree and generate the code itself
+                  //If was function, then we create a inst without operands and label on
+                  Operation_Asm_Item inst {
+                        $1->get_tk_value(),
+                        "",
+                        "",
+                        true
+                  };
+                  $1->attach_code(inst);
+                  //generate_func_label($1->code[0].instruction);
+
+                  /*Create a symbol for the main program
+                  Just for the adjustment of the first pointer
                   Global_Asm_Item g{
                         $1->get_tk_value(),
                         4,
                         "@function"
                   };
                   global_list_item.push_back(g);
-                  //Generate the func label to the program reference
+                  Generate the func label to the program reference
                   cout << $1->get_tk_value() << ":" << endl;
                   generate_label_lbf();
+                  */
             } '(' list_param ')' TK_OC_MAP type body {$$ = $1; $$->add_child($8); /*delete $1;*/}
             ;
 
@@ -612,9 +624,9 @@ void throw_error_message (AstNode* node, int error_code) {
 }
 
 void generate_basic_asm_header(vector<Global_Asm_Item> global_scope){
-      //TODO - Create methods to replace this fix generation
-      //for one with parameters
-      cout << "   .file"  << "\t" << "saida" << endl;
+      const string quote = "\""; 
+
+      cout << "   .file"  << "\t" << quote << "saida" << quote << endl;
       cout << "   .text"  << endl;
       if(global_exists){
             cout << "   .globl" << "\t" << global_scope[0].global_label << endl;

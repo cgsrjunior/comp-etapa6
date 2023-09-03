@@ -43,10 +43,14 @@ struct AstNode {
         NodeType type;
 
         //New fields for e6
+        //This need to be a list because one command line can be translated
+        //into multiple functions
         vector<Operation_Asm_Item> code;
 
         //New functions for e6
-        void attach_code(Operation_Asm_Item inst);
+        inline void attach_code(Operation_Asm_Item inst) { code.push_back(inst); };
+
+
         //End definitions for e6
 
         //Gets and sets for the new type field defined in E4

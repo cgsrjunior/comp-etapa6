@@ -22,10 +22,18 @@ struct Operation_Asm_Item{
     //Label of the instruction
     string instruction;
     //The value of first operand
-    int op1;
+    string op1;
     //The value of second operand
-    int op2;
+    string op2;
+    //Flag to check if is a function or not
+    //The idea is to use this flag to check whenever we need to generate labels
+    //Examples Functions need labels and whiles too
+    bool label_needed;
 };
 
 //Auxiliary functions
 void generate_label_lbf();
+//Print the instruction
+void print_line_asm(Operation_Asm_Item item);
+//Generate the appropriate label whenever a function definition was founded
+void generate_func_label(string name_func);
