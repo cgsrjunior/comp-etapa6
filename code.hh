@@ -46,3 +46,4 @@ void generate_label_lbf();
 void print_line_asm(Operation_Asm_Item item);
 //Generate the appropriate label whenever a function definition was founded
 void generate_func_label(string name_func);
+string generate_label_lbf_while();

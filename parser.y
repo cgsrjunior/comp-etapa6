@@ -22,6 +22,7 @@ void throw_error_message (AstNode* node, int error_code);
 void generate_basic_asm_header(vector<Global_Asm_Item> global_scope);
 int find_correct_variable_index(string name_var);
 bool variable_index_exists(string name_var);
+bool isNumber(const string& s);
 
 extern void *arvore;
 int yylex(void);
@@ -33,7 +34,15 @@ StackTable stack_table{};
 vector<Global_Asm_Item> global_list_item;
 int rbp_multiplier = 1;
 
+bool percent_operation = false;
+bool both_values = false;
+bool while_detected = false;
+int digits_only_result = 0;
+string begin_while_label;
+
 vector<Main_Var_Decl> main_var_decl;
+
+
 
 %}
 
@@ -441,7 +450,14 @@ cmd_flux_ctrl   : TK_PR_IF '(' expr ')' body {
                         $$->add_child($5);
                 }
                 | TK_PR_IF '(' expr ')' body TK_PR_ELSE body {$$ = $1; $$->add_child($3); $$->add_child($5); $$->add_child($7);}
-                | TK_PR_WHILE '(' expr ')' body {$$ = $1; $$->add_child($3); $$->add_child($5);}
+                | TK_PR_WHILE '(' expr ')' body {
+                        //Need to generate a label to mark the begin of the loop
+                        //Need a flag to create a label at the beginning of the body
+                        while_detected = true;
+                        begin_while_label = generate_label_lbf_while();
+                        //Need to generate the lines for the body and after that 
+                        $$ = $1; $$->add_child($3); $$->add_child($5);
+                  }
 
 
 cmd_func_call: name_func {
@@ -536,6 +552,94 @@ expr_3: expr_4                     {$$ = $1;}
 
 expr_4: expr_5                     {$$ = $1;}
       | expr_4 bin_thr_expr expr_5 {
+            if(isNumber($1->get_tk_value()) && isNumber($3->get_tk_value())){
+                  both_values = true;
+                  if($2->get_tk_value() == "+")
+                        digits_only_result = std::stoi($1->get_tk_value()) + std::stoi($3->get_tk_value());
+                  else
+                        digits_only_result = std::stoi($1->get_tk_value()) + std::stoi($3->get_tk_value());
+                  //Need to store the value on the 
+            }
+            else{
+                  string digit_operand;
+                  if(isNumber($1->get_tk_value())){
+                        digit_operand = $1->get_tk_value();
+                        int ind = find_correct_variable_index($3->get_tk_value());
+                        //Need to load the variable first
+                        Operation_Asm_Item sum_inst{
+                              "movl",
+                              "-" + std::to_string(ind) + "(%rbp)",
+                              "%eax",
+                              false,
+                              -1
+                        };
+                        print_line_asm(sum_inst);
+                  }
+                  else {
+                        //Need to make a case for both operands
+                        // equal variables
+                        if(!(isNumber($3->get_tk_value()))){
+                              digit_operand = "%edx";
+                              int ind = find_correct_variable_index($1->get_tk_value());
+                              //Need to load the variable first
+                              Operation_Asm_Item sum_inst{
+                                    "movl",
+                                    "-" + std::to_string(ind) + "(%rbp)",
+                                    "%edx",
+                                    false,
+                                    -1
+                              };
+                              print_line_asm(sum_inst);
+                              ind = find_correct_variable_index($3->get_tk_value());
+                              Operation_Asm_Item sum_inst2{
+                                    "movl",
+                                    "-" + std::to_string(ind) + "(%rbp)",
+                                    "%eax",
+                                    false,
+                                    -1
+                              };
+                              print_line_asm(sum_inst2);
+                        }
+                        else{
+                              digit_operand = $3->get_tk_value();
+                              int ind = find_correct_variable_index($1->get_tk_value());
+                              //Need to load the variable first
+                              Operation_Asm_Item sum_inst{
+                                    "movl",
+                                    "-" + std::to_string(ind) + "(%rbp)",
+                                    "%eax",
+                                    false,
+                                    -1
+                              };
+                              print_line_asm(sum_inst);       
+                        }           
+                  }
+                  //Here we need to check if we want an addl
+                  //or a subl
+                  if($2->get_tk_value() == "+"){
+                        //Then generate the addl
+                        Operation_Asm_Item sum_inst2{
+                              "addl",
+                              digit_operand,
+                              "%eax",
+                              false,
+                              -1
+                        };
+                        print_line_asm(sum_inst2);
+                  }
+                  else{
+                        //Then generate the sulb
+                        Operation_Asm_Item sum_inst2{
+                              "subl",
+                              digit_operand,
+                              "%eax",
+                              false,
+                              -1
+                        };
+                        print_line_asm(sum_inst2);
+                  }
+            }
+
             $$ = $2; 
             $$->add_child($1); 
             $$->add_child($3);
@@ -545,6 +649,121 @@ expr_4: expr_5                     {$$ = $1;}
 
 expr_5: unary_expr                     {$$ = $1;}
       | expr_5 bin_sec_expr unary_expr {
+            /*
+            The Multiplication Method
+                  movl	-8(%rbp), %eax
+                  imull	-12(%rbp), %eax
+                  movl	%eax, -4(%rbp)
+            */
+            /*
+            The Division format
+                  movl	-8(%rbp), %eax
+                  cltd
+                  idivl	-12(%rbp)
+                  movl	%eax, -4(%rbp)
+            */
+            /*
+            The % op format
+            	movl	-8(%rbp), %eax
+                  cltd
+                  idivl	-12(%rbp)
+                  movl	%edx, -4(%rbp)
+            */
+            if(isNumber($1->get_tk_value()) && isNumber($3->get_tk_value())){
+                  both_values = true;
+                  if($2->get_tk_value() == "*")
+                        digits_only_result = std::stoi($1->get_tk_value()) * std::stoi($3->get_tk_value());
+                  else if($2->get_tk_value() == "/")
+                        digits_only_result = std::stoi($1->get_tk_value()) / std::stoi($3->get_tk_value());
+                  else
+                        digits_only_result = std::stoi($1->get_tk_value()) % std::stoi($3->get_tk_value());
+            }
+            else{
+                  string digit_operand;
+                  if(isNumber($1->get_tk_value())){
+                        digit_operand = $1->get_tk_value();
+                        int ind = find_correct_variable_index($3->get_tk_value());
+                        //Need to load the variable first
+                        Operation_Asm_Item sum_inst{
+                              "movl",
+                              "-" + std::to_string(ind) + "(%rbp)",
+                              "%eax",
+                              false,
+                              -1
+                        };
+                        print_line_asm(sum_inst);
+                  }
+                  else {
+                        if(!isNumber($3->get_tk_value())){
+                              //Pick the address and prepare for the operation
+                              digit_operand = find_correct_variable_index($3->get_tk_value());
+                              //cout << digit_operand << endl;
+                              digit_operand = "-" + digit_operand + "(%rbp)";
+                              int ind = find_correct_variable_index($1->get_tk_value());
+                              //Need to load the variable first
+                              Operation_Asm_Item sum_inst{
+                                    "movl",
+                                    "-" + std::to_string(ind) + "(%rbp)",
+                                    "%eax",
+                                    false,
+                                    -1
+                              };
+                              print_line_asm(sum_inst);
+                        }
+                        else{
+                              digit_operand = $3->get_tk_value();
+                              int ind = find_correct_variable_index($1->get_tk_value());
+                              //Need to load the variable first
+                              Operation_Asm_Item sum_inst{
+                                    "movl",
+                                    "-" + std::to_string(ind) + "(%rbp)",
+                                    "%eax",
+                                    false,
+                                    -1
+                              };
+                              print_line_asm(sum_inst);                  
+                        }
+                  }
+                  //Here we need to check if we want an imul
+                  //or a idivl
+                  //or a idivl for %
+                  if($2->get_tk_value() == "*"){
+                        //Then generate the addl
+                        Operation_Asm_Item sum_inst2{
+                              "imul",
+                              digit_operand,
+                              "%eax",
+                              false,
+                              -1
+                        };
+                        print_line_asm(sum_inst2);
+                  }
+                  else if($2->get_tk_value() == "/"){
+                        //Then generate the idivl
+                        Operation_Asm_Item sum_inst2{
+                              "idivl",
+                              digit_operand,
+                              "",
+                              false,
+                              -1
+                        };
+                        print_line_asm(sum_inst2);
+                  }
+                  else{
+                        //Need to use a flag to swap context
+                        percent_operation = true;
+                        //Then generate the idivl
+                        Operation_Asm_Item sum_inst2{
+                              "idivl",
+                              digit_operand,
+                              "",
+                              false,
+                              -1
+                        };
+                        print_line_asm(sum_inst2);
+                  }
+            }
+            
             $$ = $2; 
             $$->add_child($1); 
             $$->add_child($3);
@@ -607,17 +826,63 @@ cmd_atrib   : id_var_decl '=' expr {
                               throw_error_message ($1, ERR_UNDECLARED);
                               exit(ERR_UNDECLARED);
                         }
-                        Operation_Asm_Item atrib1{
-                              "movl",
-                              "$" + $3->get_tk_value(),
-                              //TODO - Create a list of variables declared in main
-                              //and search for the variables to pick the index
-                              "-" + std::to_string(ind) + "(%rbp)",
-                              false,
-                              -1
-                        };
-                        print_line_asm(atrib1);
-                        $1->attach_code(atrib1);
+                        //Check if we need to make a reatribution
+                        if(percent_operation){
+                              Operation_Asm_Item atrib1{
+                                    "movl",
+                                    "%edx",
+                                    //TODO - Create a list of variables declared in main
+                                    //and search for the variables to pick the index
+                                    "-" + std::to_string(ind) + "(%rbp)",
+                                    false,
+                                    -1
+                              };
+                              print_line_asm(atrib1);
+                              $1->attach_code(atrib1);
+                              //After finish a only digits command, we need to turn off the flag
+                              percent_operation = false; 
+                        }
+                        else if(both_values){
+                              Operation_Asm_Item atrib1{
+                                    "movl",
+                                    "$" + std::to_string(digits_only_result),
+                                    //TODO - Create a list of variables declared in main
+                                    //and search for the variables to pick the index
+                                    "-" + std::to_string(ind) + "(%rbp)",
+                                    false,
+                                    -1
+                              };
+                              print_line_asm(atrib1);
+                              $1->attach_code(atrib1);
+                              //After finish a only digits command, we need to turn off the flag
+                              both_values = false;
+                        }
+                        else if($3->get_tk_value() == "+" || $3->get_tk_value() == "-" || $3->get_tk_value() == "*" || $3->get_tk_value() == "/"){
+                              Operation_Asm_Item atrib1{
+                                    "movl",
+                                    "%eax",
+                                    //TODO - Create a list of variables declared in main
+                                    //and search for the variables to pick the index
+                                    "-" + std::to_string(ind) + "(%rbp)",
+                                    false,
+                                    -1
+                              };
+                              print_line_asm(atrib1);
+                              $1->attach_code(atrib1);
+                        }
+                        else{
+                              Operation_Asm_Item atrib1{
+                                    "movl",
+                                    "$" + $3->get_tk_value(),
+                                    //TODO - Create a list of variables declared in main
+                                    //and search for the variables to pick the index
+                                    "-" + std::to_string(ind) + "(%rbp)",
+                                    false,
+                                    -1
+                              };
+                              print_line_asm(atrib1);
+                              $1->attach_code(atrib1);
+                        }
                         $$ = $2; 
                         $$->add_child($1); 
                         $$->add_child($3);
@@ -808,3 +1073,12 @@ int find_correct_variable_index(string name_var){
       }
       
 }
+
+bool isNumber(const string& s)
+{
+    for (char const &ch : s) {
+        if (std::isdigit(ch) == 0) 
+            return false;
+    }
+    return true;
+ }

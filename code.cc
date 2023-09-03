@@ -18,6 +18,12 @@ void generate_label_lbf(){
     counter++;
 }
 
+string generate_label_lbf_while(){
+    string str;
+    str = ".LBF" + std::to_string(counter) + ":\n";
+    counter++;
+}
+
 void print_line_asm(Operation_Asm_Item item){
     if(item.label_needed)
         generate_func_label(item.instruction);
